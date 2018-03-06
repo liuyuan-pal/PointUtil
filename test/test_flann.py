@@ -15,11 +15,13 @@ def test_neighborhood():
 
     idxs=np.random.choice(pt_num,100,False)
     idxs=np.asarray(idxs,np.int32)
-    nidxs=libPointUtil.findNeighborRadiusGPU(pts,idxs,0.1,30)
-    print len(nidxs)
-    for i in range(100):
-        output_points('test_result/nidxs{}.txt'.format(i),pts[nidxs[i],:])
-        assert (idxs[i] in list(nidxs[i]))
+    for i in xrange(10000):
+        nidxs=libPointUtil.findNeighborRadiusGPU(pts,idxs,0.1,30)
+
+    # print len(nidxs)
+    # for i in range(100):
+    #     output_points('test_result/nidxs{}.txt'.format(i),pts[nidxs[i],:])
+    #     assert (idxs[i] in list(nidxs[i]))
 
 
 if __name__=="__main__":

@@ -35,10 +35,11 @@ void gridDownSampleIdxMap(
         float sample_stride,
         float min_x,
         float min_y,
-        float min_z
+        float min_z,
+        int gpu_id
 )
 {
-
+    gpuErrchk(cudaSetDevice(gpu_id))
     int block_num=pt_num/1024;
     if(pt_num%1024>0) block_num++;
     dim3 block_dim(1,block_num);

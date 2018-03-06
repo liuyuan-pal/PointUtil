@@ -5,6 +5,23 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import itertools
 
+def get_class_colors():
+    colors=np.asarray(
+            [[0,255,0],
+            [0,0,255],
+            [93,201,235],
+            [255,255,0],
+            [255,140,0],
+            [0,0,128],
+            [255,69,0],
+            [255,127,80],
+            [255,0,0],
+            [255,250,240],
+            [255,0,255],
+            [255,255,255],
+            [105,105,105],
+            [205,92,92]],dtype=np.int)
+    return colors
 
 
 def output_activation(feature, filename, dim, pts):

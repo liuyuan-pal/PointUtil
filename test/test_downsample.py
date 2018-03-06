@@ -15,15 +15,15 @@ def test_downsample():
     print 'cost {} s'.format(time.time()-begin)
 
     begin=time.time()
-    for i in xrange(100):
+    for i in xrange(10000):
         ds_idxs,ds_gidxs=libPointUtil.gridDownsampleGPU(pts,0.05,True)
-    print 'cost {} s'.format((time.time()-begin)/100.0)
+    print 'cost {} s'.format((time.time()-begin)/10000.0)
 
-    print ds_idxs.shape
-    output_points('test_result/ds.txt',pts[ds_idxs,:])
-    ds_num=ds_idxs.shape[0]
-    gcolors=np.random.randint(0,256,[ds_num,3])
-    output_points('test_result/ds_gidxs.txt',pts,gcolors[ds_gidxs,:])
+    # print ds_idxs.shape
+    # output_points('test_result/ds.txt',pts[ds_idxs,:])
+    # ds_num=ds_idxs.shape[0]
+    # gcolors=np.random.randint(0,256,[ds_num,3])
+    # output_points('test_result/ds_gidxs.txt',pts,gcolors[ds_gidxs,:])
 
 if __name__=="__main__":
     test_downsample()

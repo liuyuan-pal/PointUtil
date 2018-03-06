@@ -19,7 +19,8 @@ void gridDownSampleIdxMap(
         float sample_stride,
         float min_x,
         float min_y,
-        float min_z
+        float min_z,
+        int gpu_id
 );
 
 void gridDownSample(
@@ -27,14 +28,15 @@ void gridDownSample(
         int pt_num,
         int pt_stride,
         float sample_stride,
-        std::vector<int>& downsample_indices
+        std::vector<int>& downsample_indices,
+        int gpu_id
 )
 {
     //time_t begin=clock();
     unsigned short* grid_idxs=new unsigned short[pt_num*3];
     float min_x,min_y,min_z;
     findMinimum(pts,pt_num,pt_stride,min_x,min_y,min_z);
-    gridDownSampleIdxMap(pts,grid_idxs,pt_num,pt_stride,sample_stride,min_x,min_y,min_z);
+    gridDownSampleIdxMap(pts,grid_idxs,pt_num,pt_stride,sample_stride,min_x,min_y,min_z,gpu_id);
     //std::cout<<"gpu map "<<float(clock()-begin)/CLOCKS_PER_SEC<<std::endl;
 
     //begin=clock();
@@ -79,14 +81,15 @@ void gridDownSampleV2(
         int pt_stride,
         float sample_stride,
         std::vector<int>& ds_idxs,
-        std::vector<int>& ds_gidxs
+        std::vector<int>& ds_gidxs,
+        int gpu_id
 )
 {
-    time_t begin=clock();
+    //time_t begin=clock();
     unsigned short* grid_idxs=new unsigned short[pt_num*3];
     float min_x,min_y,min_z;
     findMinimum(pts,pt_num,pt_stride,min_x,min_y,min_z);
-    gridDownSampleIdxMap(pts,grid_idxs,pt_num,pt_stride,sample_stride,min_x,min_y,min_z);
+    gridDownSampleIdxMap(pts,grid_idxs,pt_num,pt_stride,sample_stride,min_x,min_y,min_z,gpu_id);
     //std::cout<<"gpu map "<<float(clock()-begin)/CLOCKS_PER_SEC<<std::endl;
 
     //begin=clock();
@@ -133,5 +136,47 @@ void gridDownSampleV2(
         gloc[gid]+=1;
     }
     //std::cout<<"push cost "<<float(clock()-begin)/CLOCKS_PER_SEC<<std::endl;
+    delete[] grid_idxs;
+}
+
+
+
+void computeGridIdx(
+        float* pts,
+        int pt_num,
+        int pt_stride,
+        float sample_stride,
+        std::vector<int>& ds_gidxs,
+        int gpu_id
+)
+{
+    unsigned short* grid_idxs=new unsigned short[pt_num*3];
+    float min_x,min_y,min_z;
+    findMinimum(pts,pt_num,pt_stride,min_x,min_y,min_z);
+    gridDownSampleIdxMap(pts,grid_idxs,pt_num,pt_stride,sample_stride,min_x,min_y,min_z,gpu_id);
+
+    std::unordered_map<unsigned long long, int> map;
+    int ds_pt_num=0;
+    ds_gidxs.resize(pt_num);
+    for(int i=0;i<pt_num;i++)
+    {
+        unsigned long long x=grid_idxs[i*3];
+        unsigned long long y=grid_idxs[i*3+1];
+        unsigned long long z=grid_idxs[i*3+2];
+        unsigned long long idx=0;
+        idx=(idx|x)|(y<<16|z<<32);
+
+        auto it=map.find(idx);
+        if(it!=map.end())
+        {
+            ds_gidxs[i]=it->second;
+        }
+        else
+        {
+            map[idx]=ds_pt_num;
+            ds_gidxs[i]=ds_pt_num;
+            ds_pt_num++;
+        }
+    }
     delete[] grid_idxs;
 }

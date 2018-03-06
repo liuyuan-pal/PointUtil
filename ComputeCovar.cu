@@ -65,18 +65,19 @@ void computeCovarsGPUKernel(
 void computeCovarsGPUImpl(
         float* pts,             // [pn,ps]
         int* nidxs,             // [csum]
-        int* nidxs_lens,        // [pn]
-        int* nidxs_bgs,         // [pn]
-        float* covars,          // [pn,9]
+        int* nidxs_lens,        // [fn]
+        int* nidxs_bgs,         // [fn]
+        float* covars,          // [fn,9]
         int pn,
+        int fn,
         int ps,
         int csum,
         int gpu_index
 )
 {
     gpuErrchk(cudaSetDevice(gpu_index))
-    int block_num=pn/1024;
-    if(pn%1024>0) block_num++;
+    int block_num=fn/1024;
+    if(fn%1024>0) block_num++;
     dim3 block_dim(1,block_num);
     dim3 thread_dim(1,1024);
 
@@ -87,17 +88,17 @@ void computeCovarsGPUImpl(
     int* d_nidxs,*d_nidxs_lens,*d_nidxs_bgs;
     gpuErrchk(cudaMalloc((void**)&d_nidxs, csum * sizeof(int)))
     gpuErrchk(cudaMemcpy(d_nidxs, nidxs, csum * sizeof(int),cudaMemcpyHostToDevice))
-    gpuErrchk(cudaMalloc((void**)&d_nidxs_lens, pn * sizeof(int)))
-    gpuErrchk(cudaMemcpy(d_nidxs_lens, nidxs_lens, pn * sizeof(int),cudaMemcpyHostToDevice))
-    gpuErrchk(cudaMalloc((void**)&d_nidxs_bgs, pn * sizeof(int)))
-    gpuErrchk(cudaMemcpy(d_nidxs_bgs, nidxs_bgs, pn * sizeof(int),cudaMemcpyHostToDevice))
+    gpuErrchk(cudaMalloc((void**)&d_nidxs_lens, fn * sizeof(int)))
+    gpuErrchk(cudaMemcpy(d_nidxs_lens, nidxs_lens, fn * sizeof(int),cudaMemcpyHostToDevice))
+    gpuErrchk(cudaMalloc((void**)&d_nidxs_bgs, fn * sizeof(int)))
+    gpuErrchk(cudaMemcpy(d_nidxs_bgs, nidxs_bgs, fn * sizeof(int),cudaMemcpyHostToDevice))
 
     float* d_covars;
-    gpuErrchk(cudaMalloc((void**)&d_covars, pn * 9 * sizeof(float)))
+    gpuErrchk(cudaMalloc((void**)&d_covars, fn * 9 * sizeof(float)))
 
-    computeCovarsGPUKernel <<<block_dim,thread_dim>>>(d_pts,d_nidxs,d_nidxs_lens,d_nidxs_bgs,d_covars,pn,ps);
+    computeCovarsGPUKernel <<<block_dim,thread_dim>>>(d_pts,d_nidxs,d_nidxs_lens,d_nidxs_bgs,d_covars,fn,ps);
 
-    gpuErrchk(cudaMemcpy(covars, d_covars, pn * 9 * sizeof(float),cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(covars, d_covars, fn * 9 * sizeof(float),cudaMemcpyDeviceToHost));
 
     cudaFree(d_pts);
     cudaFree(d_nidxs);
