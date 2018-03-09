@@ -63,6 +63,13 @@ inline PyObject* vec1DToNDArray3D(std::vector<float>& vec, unsigned int dim1, un
     return array;
 }
 
+inline PyObject* npArray1Df(int dim)
+{
+    npy_intp shape[1]={dim};
+    PyObject* array=PyArray_SimpleNew(1,shape,NPY_FLOAT32);
+    return array;
+};
+
 inline PyObject* npArray2Df(int dim1,int dim2)
 {
     npy_intp shape[2]={dim1,dim2};

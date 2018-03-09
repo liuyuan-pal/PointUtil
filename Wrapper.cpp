@@ -88,6 +88,80 @@ PyObject* findNeighborRadiusPartGPU(const bpn::ndarray& pts,const bpn::ndarray& 
     return list;
 }
 
+PyObject* findNeighborKInAnotherGPU(const bpn::ndarray& spts,const bpn::ndarray& qpts,int k,int leaf_size=15)
+{
+    assert(spts.shape(1)==3);
+    assert(spts.get_flags()&bpn::ndarray::C_CONTIGUOUS); //must be contiguous
+    assert(std::strcmp(bp::extract<const char *>(bp::str(spts.get_dtype())),"float32")==0);
+
+    assert(qpts.shape(1)==3);
+    assert(qpts.get_flags()&bpn::ndarray::C_CONTIGUOUS); //must be contiguous
+    assert(std::strcmp(bp::extract<const char *>(bp::str(qpts.get_dtype())),"float32")==0);
+
+    const long int spt_num=spts.shape(0);
+    const long int qpt_num=qpts.shape(0);
+
+    assert(leaf_size<spt_num);
+
+    auto spts_data = reinterpret_cast<float*>(spts.get_data());
+    auto qpts_data = reinterpret_cast<float*>(qpts.get_data());
+    PyObject* list;
+
+    std::vector<std::vector<int> > indices(qpt_num,std::vector<int>(k));
+    std::vector<std::vector<float> > dists(qpt_num,std::vector<float>(k));
+    Py_BEGIN_ALLOW_THREADS
+        flann::Matrix<float> dataset(spts_data,spt_num,3);
+        flann::KDTreeCuda3dIndex<flann::L2_Simple<float> > index(dataset,flann::KDTreeCuda3dIndexParams(leaf_size));
+        index.buildIndex();
+
+        flann::Matrix<float> query_dataset(qpts_data,qpt_num,3);
+
+        flann::SearchParams search_params;
+        search_params.sorted=false;
+        search_params.eps=0.f;
+        index.knnSearchGpu(query_dataset,indices,dists,k,search_params);
+    Py_END_ALLOW_THREADS
+    list= vec2DToListNDArray2DInt(indices);
+
+    return list;
+}
+
+
+PyObject* findNeighborRadiusInAnotherGPU(const bpn::ndarray& spts,const bpn::ndarray& qpts,float radius,int leaf_size=15)
+{
+    assert(spts.shape(1)==3);
+    assert(spts.get_flags()&bpn::ndarray::C_CONTIGUOUS); //must be contiguous
+    assert(std::strcmp(bp::extract<const char *>(bp::str(spts.get_dtype())),"float32")==0);
+
+    assert(qpts.shape(1)==3);
+    assert(qpts.get_flags()&bpn::ndarray::C_CONTIGUOUS); //must be contiguous
+    assert(std::strcmp(bp::extract<const char *>(bp::str(qpts.get_dtype())),"float32")==0);
+
+    const long int spt_num=spts.shape(0);
+    const long int qpt_num=qpts.shape(0);
+    auto spts_data = reinterpret_cast<float*>(spts.get_data());
+    auto qpts_data = reinterpret_cast<float*>(qpts.get_data());
+    PyObject* list;
+
+    std::vector<std::vector<int> > indices;
+    std::vector<std::vector<float> > dists;
+    Py_BEGIN_ALLOW_THREADS
+        flann::Matrix<float> dataset(spts_data,spt_num,3);
+        flann::KDTreeCuda3dIndex<flann::L2_Simple<float> > index(dataset,flann::KDTreeCuda3dIndexParams(leaf_size));
+        index.buildIndex();
+
+        flann::Matrix<float> query_dataset(qpts_data,qpt_num,3);
+
+        flann::SearchParams search_params;
+        search_params.sorted=false;
+        search_params.eps=0.f;
+        index.radiusSearch(query_dataset,indices,dists,radius*radius,search_params);
+    Py_END_ALLOW_THREADS
+    list= vec2DToListNDArray2DInt(indices);
+
+    return list;
+}
+
 PyObject* findNeighborRadiusAllCPU(const bpn::ndarray& pts,float radius,int leaf_size=15)
 {
     assert(pts.shape(1)==3);
@@ -422,16 +496,88 @@ adjustPointsMemoryCPU(
     return list->ptr();
 }
 
+void interpolateImpl(
+        float* h_sxyzs,   // [spn,3]
+        float* h_sprobs,  // [spn,cn]
+        float* h_qxyzs,   // [qpn,3]
+        float* h_qprobs,  // [qpn,cn]
+        int* h_nidxs,
+        int* h_nidxs_lens,// [qpn]
+        int* h_nidxs_bgs, // [qpn]
+        int spn,
+        int qpn,
+        int cn,
+        int nn,
+        float ratio,
+        int gpu_id
+);
+
+static PyObject*
+interpolateProbsGPU(
+        const bpn::ndarray &sxyzs,
+        const bpn::ndarray &qxyzs,
+        const bpn::ndarray &sprobs,
+        const bpn::ndarray &nidxs,
+        const bpn::ndarray &nidxs_lens,
+        const bpn::ndarray &nidxs_bgs,
+        float ratio,
+        int gpu_id=0
+)
+{
+    assert(sxyzs.shape(1) == 3);
+    assert(sxyzs.get_flags() & bpn::ndarray::C_CONTIGUOUS); //must be contiguous
+    assert(std::strcmp(bp::extract<const char *>(bp::str(sxyzs.get_dtype())), "float32") == 0);
+    int spn=sxyzs.shape(0);
+
+    assert(qxyzs.shape(1) == 3);
+    assert(qxyzs.get_flags()&bpn::ndarray::C_CONTIGUOUS);
+    assert(std::strcmp(bp::extract<const char *>(bp::str(qxyzs.get_dtype())),"float32")==0);
+    int qpn=qxyzs.shape(0);
+
+    assert(sprobs.shape(0) == spn);
+    assert(sprobs.get_flags()&bpn::ndarray::C_CONTIGUOUS);
+    assert(std::strcmp(bp::extract<const char *>(bp::str(sprobs.get_dtype())),"float32")==0);
+    int cn=sprobs.shape(1);
+
+    assert(nidxs.get_flags()&bpn::ndarray::C_CONTIGUOUS);
+    assert(std::strcmp(bp::extract<const char *>(bp::str(nidxs.get_dtype())),"int32")==0);
+    int nn=nidxs.shape(0);
+
+    assert(nidxs_lens.shape(0) == qpn);
+    assert(nidxs_lens.get_flags()&bpn::ndarray::C_CONTIGUOUS);
+    assert(std::strcmp(bp::extract<const char *>(bp::str(nidxs_lens.get_dtype())),"int32")==0);
+
+    assert(nidxs_bgs.shape(0) == qpn);
+    assert(nidxs_bgs.get_flags()&bpn::ndarray::C_CONTIGUOUS);
+    assert(std::strcmp(bp::extract<const char *>(bp::str(nidxs_bgs.get_dtype())),"int32")==0);
+
+    float* sxyzs_data= reinterpret_cast<float*>(sxyzs.get_data());
+    float* qxyzs_data= reinterpret_cast<float*>(qxyzs.get_data());
+    float* sprobs_data= reinterpret_cast<float*>(sprobs.get_data());
+    int* nidxs_data=reinterpret_cast<int*>(nidxs.get_data());
+    int* nidxs_lens_data=reinterpret_cast<int*>(nidxs_lens.get_data());
+    int* nidxs_bgs_data=reinterpret_cast<int*>(nidxs_bgs.get_data());
+
+    PyObject* qprobs=npArray2Df(qpn,cn);
+    float* qprobs_data=reinterpret_cast<float*>(PyArray_DATA((PyArrayObject*)qprobs));
+
+    interpolateImpl(sxyzs_data,sprobs_data,qxyzs_data,qprobs_data,nidxs_data,nidxs_lens_data,nidxs_bgs_data,spn,qpn,cn,nn,ratio,gpu_id);
+
+    return qprobs;
+}
 
 BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborRadiusAllGPUOverloads, findNeighborRadiusAllGPU, 2, 3);
 BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborRadiusPartGPUOverloads, findNeighborRadiusPartGPU, 3, 4);
 BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborRadiusAllCPUOverloads, findNeighborRadiusAllCPU, 2, 3);
 BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborRadiusPartCPUOverloads, findNeighborRadiusPartCPU, 3, 4);
+BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborRadiusInAnotherGPUOverloads, findNeighborRadiusInAnotherGPU, 3, 4);
+BOOST_PYTHON_FUNCTION_OVERLOADS(findNeighborKInAnotherGPUOverloads, findNeighborKInAnotherGPU, 3, 4);
 
 BOOST_PYTHON_FUNCTION_OVERLOADS(gridDownsampleGPUOverloads, gridDownsampleGPU, 2, 3);
 BOOST_PYTHON_FUNCTION_OVERLOADS(sampleRotatedBlockGPUOverloads, sampleRotatedBlockGPU, 4, 5);
 BOOST_PYTHON_FUNCTION_OVERLOADS(computeCovarsGPUOverloads, computeCovarsGPU, 4, 5);
 BOOST_PYTHON_FUNCTION_OVERLOADS(sortVoxelGPUOverloads, sortVoxelGPU, 2, 3);
+BOOST_PYTHON_FUNCTION_OVERLOADS(interpolateProbsGPUOverloads, interpolateProbsGPU, 7, 8);
 
 BOOST_PYTHON_MODULE(libPointUtil)
 {
@@ -442,6 +588,8 @@ BOOST_PYTHON_MODULE(libPointUtil)
     bp::def("findNeighborRadiusGPU",findNeighborRadiusPartGPU,findNeighborRadiusPartGPUOverloads());
     bp::def("findNeighborRadiusCPU",findNeighborRadiusAllCPU,findNeighborRadiusAllCPUOverloads());
     bp::def("findNeighborRadiusCPU",findNeighborRadiusPartCPU,findNeighborRadiusPartCPUOverloads());
+    bp::def("findNeighborInAnotherGPU",findNeighborRadiusInAnotherGPU,findNeighborRadiusInAnotherGPUOverloads());
+    bp::def("findNeighborInAnotherGPU",findNeighborKInAnotherGPU,findNeighborKInAnotherGPUOverloads());
 
     bp::def("gridDownsampleGPU", gridDownsampleGPU, gridDownsampleGPUOverloads());
 
@@ -453,4 +601,5 @@ BOOST_PYTHON_MODULE(libPointUtil)
 
     bp::def("computeCenterDiffCPU", computeCenterDiffCPU);
     bp::def("adjustPointsMemoryCPU", adjustPointsMemoryCPU);
+    bp::def("interpolateProbsGPU", interpolateProbsGPU, interpolateProbsGPUOverloads());
 }

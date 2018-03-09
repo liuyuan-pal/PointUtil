@@ -27,7 +27,8 @@ add_definitions(-O2)
 
 find_package(CUDA REQUIRED)
 
-set(SOURCE_FILES Wrapper.cpp Downsample.cpp Downsample.cu SampleBlock.cpp SampleBlock.cu ComputeCovar.cu VoxelPooling.cpp)
+set(SOURCE_FILES Wrapper.cpp Downsample.cpp Downsample.cu SampleBlock.cpp SampleBlock.cu
+        ComputeCovar.cu VoxelPooling.cpp Interpolate.cu Interpolate.cpp)
 cuda_add_library(PointUtil SHARED ${SOURCE_FILES})
 #add_library(PointUtil SHARED ${SOURCE_FILES})
 
