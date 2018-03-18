@@ -89,3 +89,58 @@ sampleRotatedBlockGPUImpl(
     delete [] result;
     return block_idxs;
 }
+
+
+std::vector<std::vector<int> >
+sampleRotatedBlockGatherPointsGPUImpl(
+        float *points,
+        int pt_num,
+        int pt_stride,
+        float block_size,
+        float *bg_list,
+        int bg_num,
+        int gpu_index
+)
+{
+//    std::cout<<"here\n";
+    float min_x,min_y,min_z;
+    findMinimum(points,pt_num,pt_stride,min_x,min_y,min_z);
+
+//    std::cout<<"here\n";
+//    std::cout<<pt_num<<" "<<bg_num<<std::endl;
+    bool* result=new bool[pt_num*bg_num];
+//    std::cout<<"here\n";
+    sampleRotatedBlockGatherPoints(points, bg_list, result,
+                                   pt_stride, pt_num, bg_num,
+                                   1.f, 0.f, 0.f, 1.f, block_size,
+                                   min_x, min_y, gpu_index);
+
+
+//    std::cout<<"here\n";
+    std::vector<std::vector<int> > block_idxs(bg_num);
+
+    //begin=clock();
+    for(int i=0;i<pt_num;i++)
+    {
+        for(int j=0;j<bg_num;j++)
+        {
+            if(result[i*bg_num+j])
+                block_idxs[j].push_back(i);
+        }
+    }
+
+//    std::cout<<"here\n";
+    std::vector<std::vector<int> > refined_block_idxs;
+    for(int j=0;j<bg_num;j++)
+    {
+        if(block_idxs[j].size()>0)
+            refined_block_idxs.push_back(block_idxs[j]);
+    }
+
+//    std::cout<<"here\n";
+    //std::cout<<"gather cost "<<float(clock()-begin)/CLOCKS_PER_SEC<<"s \n";
+    //std::cout<<"gather\n";
+
+    delete [] result;
+    return refined_block_idxs;
+}

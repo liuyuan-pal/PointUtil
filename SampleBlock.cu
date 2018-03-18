@@ -55,29 +55,35 @@ void sampleRotatedBlockGatherPoints(
         int gpu_index
 )
 {
-
+//    printf("here1\n");
     HANDLE_ERROR(cudaSetDevice(gpu_index),"set gpu index error")
 
+//    printf("here1\n");
     int block_num=point_num/1024;
     if(point_num%1024>0) block_num++;
     dim3 block_dim(1,block_num);
     dim3 thread_dim(1,1024);
 
+//    printf("here1\n");
     float * d_points,*d_retain_origin;
     bool* d_result;
+//    printf("here1\n");
     gpuErrchk(cudaMalloc((void**)&d_points, point_num * point_stride * sizeof(float)))
     gpuErrchk(cudaMalloc((void**)&d_retain_origin, retain_num * 2 * sizeof(float)))
     gpuErrchk(cudaMalloc((void**)&d_result, point_num * retain_num * sizeof(bool)))
 
+//    printf("here1\n");
     gpuErrchk(cudaMemcpy(d_points, points, point_num * point_stride * sizeof(float), cudaMemcpyHostToDevice))
     gpuErrchk(cudaMemcpy(d_retain_origin, retain_origin, retain_num * 2 * sizeof(float), cudaMemcpyHostToDevice))
 
+//    printf("here1\n");
     gatherPoints<<<block_dim,thread_dim>>>(
                   d_points,d_retain_origin,d_result,
                   point_stride,point_num,retain_num,
                   block_axis_xx,block_axis_xy,
                   block_axis_yx,block_axis_yy,block_size,
                           min_x,min_y);
+//    printf("here1\n");
 
     gpuErrchk(cudaMemcpy(result, d_result, point_num * retain_num * sizeof(bool), cudaMemcpyDeviceToHost))
 
